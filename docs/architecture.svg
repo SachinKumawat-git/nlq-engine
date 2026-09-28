@@ -1,0 +1,90 @@
+<svg viewBox="0 0 1180 760" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <rect width="1180" height="760" fill="#ffffff"/>
+  <text x="30" y="34" font-size="20" font-weight="bold" fill="#111">Natural Language Insights Engine — Architecture</text>
+
+  <!-- Client -->
+  <rect x="30" y="70" width="200" height="60" rx="8" fill="#e8f0fe" stroke="#4285f4"/>
+  <text x="130" y="95" font-size="13" text-anchor="middle" fill="#111" font-weight="bold">Browser UI</text>
+  <text x="130" y="113" font-size="11" text-anchor="middle" fill="#333">upload CSV, ask questions</text>
+
+  <!-- FastAPI -->
+  <rect x="30" y="180" width="1120" height="90" rx="8" fill="#fff" stroke="#888"/>
+  <text x="50" y="203" font-size="14" font-weight="bold" fill="#111">FastAPI service</text>
+  <rect x="50" y="215" width="150" height="40" rx="6" fill="#f1f3f4" stroke="#999"/>
+  <text x="125" y="239" font-size="11" text-anchor="middle">POST /ingest</text>
+  <rect x="215" y="215" width="150" height="40" rx="6" fill="#f1f3f4" stroke="#999"/>
+  <text x="290" y="239" font-size="11" text-anchor="middle">POST /query</text>
+  <rect x="380" y="215" width="200" height="40" rx="6" fill="#f1f3f4" stroke="#999"/>
+  <text x="480" y="234" font-size="11" text-anchor="middle">GET /jobs/{id}</text>
+  <text x="480" y="248" font-size="10" text-anchor="middle" fill="#555">poll or SSE stream</text>
+  <rect x="595" y="215" width="180" height="40" rx="6" fill="#f1f3f4" stroke="#999"/>
+  <text x="685" y="239" font-size="11" text-anchor="middle">GET /datasets/{id}</text>
+  <rect x="790" y="215" width="330" height="40" rx="6" fill="#f1f3f4" stroke="#999"/>
+  <text x="955" y="239" font-size="11" text-anchor="middle">Validation, structured JSON errors, no stack traces</text>
+
+  <!-- Job manager -->
+  <rect x="30" y="300" width="1120" height="70" rx="8" fill="#fef7e0" stroke="#f9ab00"/>
+  <text x="50" y="323" font-size="14" font-weight="bold" fill="#111">Job Manager (in-process ThreadPoolExecutor)</text>
+  <text x="50" y="343" font-size="11" fill="#333">Enqueues ingest / query work off the request thread. Returns job_id immediately. Tracks queued → running → done|failed. Fan-out point for future Redis/Celery swap.</text>
+  <text x="50" y="359" font-size="11" fill="#333">Each job also has its own subscriber queue, used by the SSE stream endpoint.</text>
+
+  <!-- Ingest path -->
+  <rect x="30" y="400" width="530" height="180" rx="8" fill="#e6f4ea" stroke="#34a853"/>
+  <text x="50" y="424" font-size="13" font-weight="bold">Ingest worker</text>
+  <rect x="50" y="436" width="230" height="46" rx="6" fill="#fff" stroke="#34a853"/>
+  <text x="165" y="455" font-size="11" text-anchor="middle">DuckDB read_csv_auto</text>
+  <text x="165" y="470" font-size="10" text-anchor="middle" fill="#555">sniffs headers, types, delimiter</text>
+  <rect x="300" y="436" width="240" height="46" rx="6" fill="#fff" stroke="#34a853"/>
+  <text x="420" y="455" font-size="11" text-anchor="middle">Schema profiler</text>
+  <text x="420" y="470" font-size="10" text-anchor="middle" fill="#555">per-column type, nulls, samples, min/max</text>
+  <rect x="50" y="500" width="490" height="46" rx="6" fill="#fff" stroke="#34a853"/>
+  <text x="295" y="519" font-size="11" text-anchor="middle">dataset_id.duckdb (one file per dataset) + profile.json</text>
+  <text x="295" y="533" font-size="10" text-anchor="middle" fill="#555">on local disk under DB_DIR</text>
+  <text x="50" y="565" font-size="10" fill="#555">No column names are ever hardcoded — everything downstream reads from profile.json.</text>
+
+  <!-- Query path -->
+  <rect x="600" y="400" width="550" height="360" rx="8" fill="#fce8e6" stroke="#ea4335"/>
+  <text x="620" y="424" font-size="13" font-weight="bold">Query worker (nl_query.py)</text>
+
+  <rect x="620" y="436" width="510" height="40" rx="6" fill="#fff" stroke="#ea4335"/>
+  <text x="875" y="460" font-size="11" text-anchor="middle">1. Build schema context string from profile.json (generic, per-dataset)</text>
+
+  <rect x="620" y="488" width="510" height="46" rx="6" fill="#fff" stroke="#ea4335"/>
+  <text x="875" y="507" font-size="11" text-anchor="middle">2. LLM call (Ollama, local) → strict JSON</text>
+  <text x="875" y="522" font-size="10" text-anchor="middle" fill="#555">{answerable, sql, reasoning, refusal_reason}</text>
+
+  <rect x="620" y="546" width="510" height="46" rx="6" fill="#fff" stroke="#ea4335"/>
+  <text x="875" y="565" font-size="11" text-anchor="middle">3. sql_guard.py — SELECT/WITH only, no DDL/DML,</text>
+  <text x="875" y="580" font-size="10" text-anchor="middle" fill="#555">single statement, known table only</text>
+
+  <rect x="620" y="604" width="510" height="46" rx="6" fill="#fff" stroke="#ea4335"/>
+  <text x="875" y="623" font-size="11" text-anchor="middle">4. Execute on a READ-ONLY DuckDB connection, with timeout</text>
+  <text x="875" y="638" font-size="10" text-anchor="middle" fill="#555">interrupt() + cancel on timeout; row cap on result set</text>
+
+  <rect x="620" y="662" width="510" height="46" rx="6" fill="#fff" stroke="#ea4335"/>
+  <text x="875" y="681" font-size="11" text-anchor="middle">5. Deterministic answer formatting (no LLM re-phrasing of numbers)</text>
+  <text x="875" y="696" font-size="10" text-anchor="middle" fill="#555">exact SQL result is what gets shown — zero hallucination surface</text>
+
+  <text x="620" y="730" font-size="10" fill="#555">If step 2 says answerable=false, or step 3 rejects the SQL, the pipeline refuses with a reason instead of guessing.</text>
+
+  <!-- LLM box -->
+  <rect x="30" y="620" width="530" height="60" rx="8" fill="#f3e8fd" stroke="#a142f4"/>
+  <text x="50" y="644" font-size="12" font-weight="bold">LLM client abstraction (llm_client.py)</text>
+  <text x="50" y="662" font-size="10" fill="#333">OllamaClient (default, local, no key) or OpenAICompatibleClient — same interface, swappable via LLM_PROVIDER env var</text>
+
+  <!-- arrows -->
+  <line x1="130" y1="130" x2="130" y2="180" stroke="#444" marker-end="url(#arrow)"/>
+  <line x1="130" y1="270" x2="130" y2="300" stroke="#444" marker-end="url(#arrow)"/>
+  <line x1="290" y1="270" x2="290" y2="300" stroke="#444" marker-end="url(#arrow)"/>
+  <line x1="300" y1="370" x2="295" y2="400" stroke="#444" marker-end="url(#arrow)"/>
+  <line x1="875" y1="370" x2="875" y2="400" stroke="#444" marker-end="url(#arrow)"/>
+  <line x1="295" y1="620" x2="295" y2="650" stroke="#444" marker-end="url(#arrow)" stroke-dasharray="4"/>
+  <text x="300" y="612" font-size="9" fill="#777"></text>
+
+  <text x="1000" y="748" font-size="10" fill="#888">Full detail in docs/SYSTEM_DESIGN.md</text>
+</svg>

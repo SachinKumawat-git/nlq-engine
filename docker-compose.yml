@@ -1,0 +1,31 @@
+# One-command local setup. Ollama runs as its own container so the app
+# never needs the model weights baked into its image; the app container
+# talks to it over the compose network.
+#
+# First run: docker compose up --build, then in another shell:
+#   docker compose exec ollama ollama pull qwen2.5-coder:7b-instruct
+# (kept as a separate step so the image build doesn't have to download
+# several GB of model weights every time).
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5-coder:7b-instruct
+    volumes:
+      - ./data:/srv/data
+    depends_on:
+      - ollama
+
+volumes:
+  ollama_data:

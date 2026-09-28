@@ -1,0 +1,11 @@
+order_id,sku,item_name,qty,order_ts,price_usd,client_email,region
+O-1001,SKU-88,Bluetooth Earbuds,2,2024-01-03 09:15,29.99,ana@example.com,US-West
+O-1001,SKU-12,Phone Case,1,2024-01-03 09:15,9.99,ana@example.com,US-West
+O-1002,SKU-45,USB-C Cable,3,2024-01-04 11:02,6.50,ben@example.com,US-East
+O-1003,SKU-88,Bluetooth Earbuds,1,2024-01-05 14:22,29.99,cara@example.com,EU-West
+O-1004,SKU-99,Wireless Charger,1,2024-01-06 16:40,19.99,dev@example.com,US-West
+O-1005,SKU-12,Phone Case,2,2024-01-07 08:05,9.99,ana@example.com,US-West
+O-1006,SKU-45,USB-C Cable,1,2024-02-01 10:11,6.50,eli@example.com,APAC
+O-1007,SKU-88,Bluetooth Earbuds,3,2024-02-02 12:45,27.99,fay@example.com,EU-West
+O-1008,SKU-99,Wireless Charger,2,2024-02-03 09:30,18.99,ben@example.com,US-East
+O-1009,SKU-12,Phone Case,1,2024-03-11 13:00,9.99,gus@example.com,APAC

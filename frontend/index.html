@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Natural Language Insights Engine</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --accent:#1f6feb; --bg:#0d1117; --panel:#161b22; --text:#e6edf3; --muted:#8b949e; --border:#30363d; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); margin:0; padding:2rem; }
+  h1 { font-size: 1.4rem; margin-bottom: .25rem; }
+  .sub { color: var(--muted); margin-bottom: 1.5rem; }
+  .panel { background: var(--panel); border:1px solid var(--border); border-radius:10px; padding:1.25rem; margin-bottom:1.25rem; }
+  input[type=file], input[type=text] { background:#0d1117; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:.5rem; width:100%; }
+  button { background: var(--accent); color:white; border:none; border-radius:6px; padding:.55rem 1rem; cursor:pointer; font-weight:600; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:.75rem; align-items:center; }
+  table { width:100%; border-collapse: collapse; margin-top:.75rem; font-size:.85rem; }
+  th, td { border:1px solid var(--border); padding:.4rem .6rem; text-align:left; }
+  th { background:#1c2128; }
+  .status { font-size:.85rem; color:var(--muted); margin-top:.5rem; }
+  .badge { display:inline-block; padding:.15rem .5rem; border-radius:99px; font-size:.75rem; }
+  .badge.done { background:#1a4731; color:#3fb950; }
+  .badge.failed { background:#4a1a1a; color:#f85149; }
+  .badge.running, .badge.queued { background:#1c2128; color:#d29922; }
+  pre { background:#0d1117; border:1px solid var(--border); border-radius:6px; padding:.75rem; overflow-x:auto; font-size:.8rem; }
+  .refusal { color:#f0883e; }
+</style>
+</head>
+<body>
+  <h1>Natural Language Insights Engine</h1>
+  <div class="sub">Upload any transactional CSV, then ask questions in plain English.</div>
+
+  <div class="panel">
+    <h3>1. Load a dataset</h3>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".csv" />
+      <button id="uploadBtn">Upload &amp; Load</button>
+    </div>
+    <div class="status" id="ingestStatus"></div>
+    <div id="schemaBox"></div>
+  </div>
+
+  <div class="panel">
+    <h3>2. Ask a question</h3>
+    <div class="row">
+      <input type="text" id="questionInput" placeholder="e.g. Top 10 products by revenue" disabled />
+      <button id="askBtn" disabled>Ask</button>
+    </div>
+    <div class="status" id="queryStatus"></div>
+    <div id="answerBox"></div>
+  </div>
+
+<script>
+const API = "";
+let datasetId = null;
+
+const $ = (id) => document.getElementById(id);
+
+async function pollJob(jobId, onUpdate) {
+  while (true) {
+    const res = await fetch(`${API}/jobs/${jobId}`);
+    const job = await res.json();
+    onUpdate(job);
+    if (job.status === "done" || job.status === "failed") return job;
+    await new Promise(r => setTimeout(r, 700));
+  }
+}
+
+$("uploadBtn").onclick = async () => {
+  const file = $("fileInput").files[0];
+  if (!file) { alert("Choose a CSV first."); return; }
+  $("uploadBtn").disabled = true;
+  $("ingestStatus").innerHTML = '<span class="badge queued">queued</span> uploading...';
+  $("schemaBox").innerHTML = "";
+
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API}/ingest`, { method: "POST", body: form });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    $("ingestStatus").innerHTML = `<span class="badge failed">failed</span> ${escapeHtml(err.detail || res.statusText)}`;
+    $("uploadBtn").disabled = false;
+    return;
+  }
+  const { job_id } = await res.json();
+
+  const job = await pollJob(job_id, (j) => {
+    $("ingestStatus").innerHTML = `<span class="badge ${j.status}">${j.status}</span>`;
+  });
+
+  $("uploadBtn").disabled = false;
+  if (job.status === "failed") {
+    $("ingestStatus").innerHTML = `<span class="badge failed">failed</span> ${escapeHtml(job.error)}`;
+    return;
+  }
+
+  datasetId = job.result.dataset_id;
+  $("ingestStatus").innerHTML =
+    `<span class="badge done">done</span> dataset_id=<code>${datasetId}</code>, ${job.result.row_count} rows, ${job.result.columns.length} columns`;
+
+  renderSchema(job.result.columns);
+  $("questionInput").disabled = false;
+  $("askBtn").disabled = false;
+};
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+function renderSchema(columns) {
+  let html = "<table><tr><th>Column</th><th>Type</th><th>Nulls</th><th>Distinct</th><th>Samples</th></tr>";
+  for (const c of columns) {
+    html += `<tr><td>${escapeHtml(c.name)}</td><td>${escapeHtml(c.duckdb_type)}</td><td>${escapeHtml(c.null_count)}</td><td>${escapeHtml(c.distinct_count)}</td><td>${escapeHtml((c.sample_values||[]).join(", "))}</td></tr>`;
+  }
+  html += "</table>";
+  $("schemaBox").innerHTML = html;
+}
+
+$("askBtn").onclick = async () => {
+  const question = $("questionInput").value.trim();
+  if (!question || !datasetId) return;
+  $("askBtn").disabled = true;
+  $("queryStatus").innerHTML = '<span class="badge queued">queued</span>';
+  $("answerBox").innerHTML = "";
+
+  const res = await fetch(`${API}/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataset_id: datasetId, question }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    $("queryStatus").innerHTML = `<span class="badge failed">failed</span> ${escapeHtml(err.detail || res.statusText)}`;
+    $("askBtn").disabled = false;
+    return;
+  }
+  const { job_id } = await res.json();
+
+  const job = await pollJob(job_id, (j) => {
+    $("queryStatus").innerHTML = `<span class="badge ${j.status}">${j.status}</span>`;
+  });
+  $("askBtn").disabled = false;
+
+  if (job.status === "failed") {
+    $("queryStatus").innerHTML = `<span class="badge failed">failed</span> ${escapeHtml(job.error)}`;
+    return;
+  }
+
+  const r = job.result;
+  if (!r.answerable) {
+    $("answerBox").innerHTML = `<p class="refusal">Can't answer this from the data: ${escapeHtml(r.refusal_reason)}</p>` +
+      (r.sql ? `<pre>${escapeHtml(r.sql)}</pre>` : "");
+    return;
+  }
+
+  let html = `<p><strong>${escapeHtml(r.answer)}</strong></p>`;
+  if (r.sql) html += `<pre>${escapeHtml(r.sql)}</pre>`;
+  if (r.columns && r.rows) {
+    html += "<table><tr>" + r.columns.map(c => `<th>${escapeHtml(c)}</th>`).join("") + "</tr>";
+    for (const row of r.rows) {
+      html += "<tr>" + row.map(v => `<td>${escapeHtml(v)}</td>`).join("") + "</tr>";
+    }
+    html += "</table>";
+  }
+  if (r.warnings && r.warnings.length) {
+    html += `<p class="status">${escapeHtml(r.warnings.join(" "))}</p>`;
+  }
+  $("answerBox").innerHTML = html;
+};
+</script>
+</body>
+</html>
